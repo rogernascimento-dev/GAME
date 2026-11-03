@@ -443,4 +443,206 @@
             }
 
             // Reseta posição da frase para criar loop infinito
-            const larguraTexto = ctx.measureText(TEXTO_
+            const larguraTexto = ctx.measureText(TEXTO_FUNDO).width;
+            if (posXTextoFundo < -larguraTexto - 50) {
+                posXTextoFundo = LARGURA_JOGO + 20;
+            }
+
+            // Chão de fábrica com faixa amarela de segurança
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(0, POSICAO_CHAO_Y, LARGURA_JOGO, ALTURA_JOGO - POSICAO_CHAO_Y);
+            
+            // Faixa amarela de aviso
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(0, POSICAO_CHAO_Y, LARGURA_JOGO, 4);
+
+            // Marcas da esteira/chão rodando
+            ctx.fillStyle = '#1e293b';
+            const deslocamentoChao = (distanciaPercorrida * velocidadeJogo) % 40;
+            for (let x = -deslocamentoChao; x < LARGURA_JOGO; x += 40) {
+                ctx.fillRect(x, POSICAO_CHAO_Y + 14, 20, 4);
+            }
+        }
+
+        // Colisão AABB
+        function verificarColisao(p, o) {
+            const margem = 5;
+            const pX = p.x + margem;
+            const pY = p.y + margem;
+            const pLargura = p.largura - (margem * 2);
+            const pAltura = (p.estaAgachado ? p.alturaAgachado : p.alturaNormal) - (margem * 2);
+
+            const oX = o.x + margem;
+            const oY = o.y + margem;
+            const oLargura = o.largura - (margem * 2);
+            const oAltura = o.altura - (margem * 2);
+
+            return (
+                pX < oX + oLargura &&
+                pX + pLargura > oX &&
+                pY < oY + oAltura &&
+                pY + pAltura > oY
+            );
+        }
+
+        function reiniciarVariaveis() {
+            velocidadeJogo = VELOCIDADE_INICIAL;
+            pontuacao = 0;
+            distanciaPercorrida = 0;
+            contadorQuadros = 0;
+            obstaculos = [];
+            particulas = [];
+            jogador.y = POSICAO_CHAO_Y - jogador.alturaNormal;
+            jogador.velocidadeY = 0;
+            jogador.estaPulando = false;
+            jogador.estaAgachado = false;
+            scoreText.innerText = `PONTOS: 00000`;
+        }
+
+        function iniciarJogo() {
+            audio.iniciar();
+            reiniciarVariaveis();
+            estadoJogo = 'JOGANDO';
+            startOverlay.classList.add('hidden');
+            gameOverOverlay.classList.add('hidden');
+        }
+
+        function encerrarJogo() {
+            estadoJogo = 'FIM_DE_JOGO';
+            audio.tocarSomFimDeJogo();
+
+            let novoRecorde = false;
+            if (pontuacao > recorde) {
+                recorde = pontuacao;
+                localStorage.setItem('senai_runner_recorde', recorde);
+                highScoreText.innerText = `RECORDE: ${String(recorde).padStart(5, '0')}`;
+                novoRecorde = true;
+            }
+
+            finalScore.innerText = `PONTOS: ${String(pontuacao).padStart(5, '0')}`;
+            if (novoRecorde) newRecordMsg.classList.remove('hidden');
+            else newRecordMsg.classList.add('hidden');
+
+            gameOverOverlay.classList.remove('hidden');
+        }
+
+        function loopDoJogo() {
+            contadorQuadros++;
+
+            desenharCenario(ctx);
+
+            if (estadoJogo === 'JOGANDO') {
+                distanciaPercorrida++;
+                pontuacao = Math.floor(distanciaPercorrida / 5);
+
+                if (pontuacao > 0 && pontuacao % 100 === 0 && distanciaPercorrida % 5 === 0) {
+                    audio.tocarSomPonto();
+                }
+
+                if (velocidadeJogo < VELOCIDADE_MAXIMA) {
+                    velocidadeJogo += 0.0015;
+                }
+
+                scoreText.innerText = `PONTOS: ${String(pontuacao).padStart(5, '0')}`;
+
+                jogador.atualizar();
+
+                gerarObstaculos();
+                for (let i = obstaculos.length - 1; i >= 0; i--) {
+                    const obs = obstaculos[i];
+                    obs.atualizar();
+                    obs.desenhar(ctx);
+
+                    if (verificarColisao(jogador, obs)) {
+                        encerrarJogo();
+                    }
+
+                    if (obs.remover) obstaculos.splice(i, 1);
+                }
+            } else {
+                obstaculos.forEach(obs => obs.desenhar(ctx));
+            }
+
+            jogador.desenhar(ctx);
+            atualizarEDesenharParticulas(ctx);
+
+            requestAnimationFrame(loopDoJogo);
+        }
+
+        // Controles de Teclado
+        function tratarPressionamentoTeclas(e) {
+            audio.iniciar();
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (estadoJogo === 'JOGANDO') jogador.pular();
+                else seIniciadoOuFimDeJogo();
+            } else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                if (estadoJogo === 'JOGANDO') jogador.agachar(true);
+            }
+        }
+
+        function tratarSolturaTeclas(e) {
+            if (e.code === 'ArrowDown') jogador.agachar(false);
+        }
+
+        function seIniciadoOuFimDeJogo() {
+            if (estadoJogo !== 'JOGANDO') {
+                iniciarJogo();
+            }
+        }
+
+        window.addEventListener('keydown', tratarPressionamentoTeclas);
+        window.addEventListener('keyup', tratarSolturaTeclas);
+
+        // Clique/Toque no Canvas
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') jogador.pular();
+            else seIniciadoOuFimDeJogo();
+        });
+
+        // Eventos dos botões mobile
+        const acaoPuloMobile = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') jogador.pular();
+            else seIniciadoOuFimDeJogo();
+        };
+
+        const acaoAgacharInicMobile = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') jogador.agachar(true);
+        };
+
+        const acaoAgacharFimMobile = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            jogador.agachar(false);
+        };
+
+        mobileJumpBtn.addEventListener('pointerdown', acaoPuloMobile);
+        mobileDuckBtn.addEventListener('pointerdown', acaoAgacharInicMobile);
+        mobileDuckBtn.addEventListener('pointerup', acaoAgacharFimMobile);
+        mobileDuckBtn.addEventListener('pointerleave', acaoAgacharFimMobile);
+
+        // Botões das Telas de Sobreposição
+        startBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            iniciarJogo();
+        });
+        
+        restartBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            iniciarJogo();
+        });
+
+        // Inicialização garantida do loop do jogo
+        requestAnimationFrame(loopDoJogo);
+    </script>
+</body>
+</html>
