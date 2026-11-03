@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super Dino-Mario Runner - Edição Retrô</title>
+    <!-- Carregamento do framework Tailwind CSS para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonte no estilo Pixel Art de jogos arcade antigos -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* Desativa seleção acidental de texto e gestos de zoom indesejados no mobile */
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        /* Definições globais da página */
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+        }
+        /* Recorte pixelado nos cantos dos botões (Efeito Pixel Art) */
+        .pixel-corners {
+            clip-path: polygon(
+                0 4px, 4px 4px, 4px 0,
+                calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+                100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%,
+                4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)
+            );
+        }
+        /* Estilo e efeito de clique nos botões estilo Arcade */
+        .arcade-btn {
+            transition: transform 0.05s ease, background-color 0.15s ease;
+            box-shadow: inset -4px -4px 0px rgba(0,0,0,0.4), inset 4px 4px 0px rgba(255,255,255,0.4);
+        }
+        .arcade-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: inset -2px -2px 0px rgba(0,0,0,0.4), inset 2px 2px 0px rgba(255,255,255,0.4);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-2 sm:p-4">
+
+    <!-- Cabeçalho do Jogo / Título Principal -->
+    <header class="text-center mb-3">
+        <h1 class="text-xl sm:text-3xl text-yellow-400 tracking-wider drop-shadow-[0_4px_0_rgba(0,0,0,0.8)]">SUPER DINO RUNNER</h1>
+        <p class="text-[10px] sm:text-xs text-slate-400 mt-1">Pressione ESPAÇO para Pular | SETA PARA BAIXO para Agachar</p>
+    </header>
+
+    <!-- Conteiner Principal da Tela do Jogo -->
+    <div class="relative w-full max-w-4xl bg-slate-900 border-4 border-slate-700 rounded-lg overflow-hidden shadow-2xl">
+        
+        <!-- Placar Superposto (Pontuação e Recorde) -->
+        <div class="absolute top-3 left-4 right-4 flex justify-between items-center text-xs sm:text-sm z-10 pointer-events-none">
+            <div id="highScoreText" class="text-amber-400 drop-shadow">RECORDE: 00000</div>
+            <div id="scoreText" class="text-white drop-shadow">PONTOS: 00000</div>
+        </div>
+
+        <!-- Tela Principal de Renderização (Canvas HTML5) -->
+        <canvas id="gameCanvas" class="w-full h-[260px] sm:h-[360px] block cursor-pointer"></canvas>
+
+        <!-- Tela Inicial de Boas-Vindas -->
+        <div id="startOverlay" class="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-center p-4 z-20">
+            <div class="text-yellow-400 text-lg sm:text-2xl mb-4 animate-bounce">PRONTO PARA O DESAFIO?</div>
+            <p class="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
+                Desvie dos cactos, canos do Mario e inimigos voadores! Alterne entre pular e agachar para sobreviver.
+            </p>
+            <button id="startBtn" class="arcade-btn bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 px-6 rounded text-xs sm:text-sm tracking-widest pixel-corners uppercase cursor-pointer">
+                Iniciar Jogo
+            </button>
+        </div>
+
+        <!-- Tela de Fim de Jogo (Game Over) -->
+        <div id="gameOverOverlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center text-center p-4 z-20 hidden">
+            <div class="text-red-500 text-xl sm:text-3xl mb-2 drop-shadow-[0_2px_0_#000]">FIM DE JOGO</div>
+            <div id="finalScore" class="text-xs sm:text-sm text-white mb-1">PONTOS: 00000</div>
+            <div id="newRecordMsg" class="text-amber-300 text-xs mb-6 hidden animate-pulse">★ NOVO RECORDE ALCANÇADO! ★</div>
+            
+            <button id="restartBtn" class="arcade-btn bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold py-3 px-6 rounded text-xs sm:text-sm tracking-widest pixel-corners uppercase cursor-pointer mb-3">
+                Jogar Novamente
+            </button>
+            <span class="text-[10px] text-slate-400">Pressione ESPAÇO ou Toque na tela</span>
+        </div>
+    </div>
+
+    <!-- Painel de Botões Touch para Celulares e Tablets -->
+    <div class="flex gap-4 mt-4 w-full max-w-4xl sm:hidden">
+        <button id="mobileDuckBtn" class="arcade-btn flex-1 bg-indigo-700 active:bg-indigo-600 text-white py-4 rounded text-xs font-bold uppercase tracking-wider pixel-corners">
+            ▼ AGACHAR
+        </button>
+        <button id="mobileJumpBtn" class="arcade-btn flex-1 bg-amber-600 active:bg-amber-500 text-white py-4 rounded text-xs font-bold uppercase tracking-wider pixel-corners">
+            ▲ PULAR
+        </button>
+    </div>
+
+    <!-- Instruções de Hospedagem no GitHub Pages no Rodapé -->
+    <footer class="mt-4 text-center text-[10px] sm:text-xs text-slate-500 max-w-2xl">
+        <p>💡 <strong>Como publicar no GitHub Pages:</strong> Salve este arquivo com o nome <code class="text-emerald-400">index.html</code> no seu repositório do GitHub, acesse <em>Settings > Pages</em> e selecione a branch <code class="text-emerald-400">main</code>.</p>
+    </footer>
+
+    <!-- Lógica de Funcionamento do Jogo em JavaScript -->
+    <script>
+        // =========================================================================
+        // 1. SISTEMA DE EFEITOS SONOROS RETRÔ (Sintetizador via Web Audio API)
+        // =========================================================================
+        // Esta classe gera os sons dinamicamente utilizando osciladores sem precisar
+        // de nenhum arquivo externo de áudio mp3 ou wav.
+        class GerenciadorDeAudio {
+            constructor() {
+                this.ctx = null; // Contexto do Web Audio API
+            }
+
+            // Inicializa o contexto de áudio na primeira interação do usuário (exigência dos navegadores)
+            iniciar() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            // Toca o som característico de pulo de jogo 8-bits
+            tocarSomPulo() {
+                if (!this.ctx) return;
+                const oscilador = this.ctx.createOscillator();
+                const ganho = this.ctx.createGain();
+                
+                oscilador.type = 'square'; // Onda quadrada (estilo Nintendo 8-bits)
+                oscilador.frequency.setValueAtTime(150, this.ctx.currentTime);
+                oscilador.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.12);
+                
+                ganho.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                ganho.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                
+                oscilador.connect(ganho);
+                ganho.connect(this.ctx.destination);
+                
+                oscilador.start();
+                oscilador.stop(this.ctx.currentTime + 0.12);
+            }
+
+            // Toca o som quando o jogador atinge uma marca de 100 pontos
+            tocarSomPonto() {
+                if (!this.ctx) return;
+                const oscilador = this.ctx.createOscillator();
+                const ganho = this.ctx.createGain();
+                
+                oscilador.type = 'triangle'; // Onda triangular (som mais suave)
+                oscilador.frequency.setValueAtTime(587.33, this.ctx.currentTime); // Nota Ré (D5)
+                oscilador.frequency.setValueAtTime(880, this.ctx.currentTime + 0.08);  // Nota Lá (A5)
+                
+                ganho.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                ganho.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                
+                oscilador.connect(ganho);
+                ganho.connect(this.ctx.destination);
+                
+                oscilador.start();
+                oscilador.stop(this.ctx.currentTime + 0.25);
+            }
+
+            // Toca o som grave descritivo ao colidir (Fim de Jogo)
+            tocarSomFimDeJogo() {
+                if (!this.ctx) return;
+                const oscilador = this.ctx.createOscillator();
+                const ganho = this.ctx.createGain();
+                
+                oscilador.type = 'sawtooth'; // Onda dente de serra (som ruidoso/distorcido)
+                oscilador.frequency.setValueAtTime(300, this.ctx.currentTime);
+                oscilador.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.4);
+                
+                ganho.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                ganho.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                
+                oscilador.connect(ganho);
+                ganho.connect(this.ctx.destination);
+                
+                oscilador.start();
+                oscilador.stop(this.ctx.currentTime + 0.4);
+            }
+        }
+
+        // Instância global de áudio
+        const audio = new GerenciadorDeAudio();
+
+        // =========================================================================
+        // 2. CONFIGURAÇÕES DE CANVAS E CONSTANTES DO JOGO
+        // =========================================================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resolução interna fixa do Canvas (mantém proporção de Pixel Art)
+        const LARGURA_JOGO = 800;
+        const ALTURA_JOGO = 300;
+        canvas.width = LARGURA_JOGO;
+        canvas.height = ALTURA_JOGO;
+
+        // Posição do chão e valores físicos
+        const POSICAO_CHAO_Y = ALTURA_JOGO - 40;
+        const GRAVIDADE = 0.65;
+        const VELOCIDADE_INICIAL = 6.5;
+        const VELOCIDADE_MAXIMA = 14;
+
+        // Mapeamento dos elementos de interface do HTML
+        const startOverlay = document.getElementById('startOverlay');
+        const gameOverOverlay = document.getElementById('gameOverOverlay');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const scoreText = document.getElementById('scoreText');
+        const highScoreText = document.getElementById('highScoreText');
+        const finalScore = document.getElementById('finalScore');
+        const newRecordMsg = document.getElementById('newRecordMsg');
+        const mobileJumpBtn = document.getElementById('mobileJumpBtn');
+        const mobileDuckBtn = document.getElementById('mobileDuckBtn');
+
+        // Estado e Variáveis Globais do Jogo
+        let estadoJogo = 'INICIAL'; // Possíveis estados: 'INICIAL', 'JOGANDO', 'FIM_DE_JOGO'
+        let velocidadeJogo = VELOCIDADE_INICIAL;
+        let pontuacao = 0;
+        let recorde = parseInt(localStorage.getItem('dino_mario_recorde') || '0', 10);
+        let distanciaPercorrida = 0;
+        let contadorQuadros = 0;
+        let particulas = [];
+        let obstaculos = [];
+        let nuvens = [];
+
+        // Exibe o recorde salvo na memória do navegador ao carregar
+        highScoreText.innerText = `RECORDE: ${String(recorde).padStart(5, '0')}`;
+
+        // =========================================================================
+        // 3. PERSONAGEM JOGÁVEL (Mistura de Dino com Mario)
+        // =========================================================================
+        const jogador = {
+            x: 60,
+            y: POSICAO_CHAO_Y - 44,
+            largura: 40,
+            altura: 44,
+            alturaNormal: 44,
+            alturaAgachado: 24,
+            velocidadeY: 0,
+            estaPulando: false,
+            estaAgachado: false,
+            quadroAnimacao: 0,
+            temporizadorAnimacao: 0,
+
+            // Executa o pulo se o jogador estiver pisando no chão
+            pular() {
+                if (!this.estaPulando) {
+                    this.velocidadeY = -12.5; // Impulso vertical para cima
+                    this.estaPulando = true;
+                    audio.tocarSomPulo();
+                    criarParticulasDePoeira(this.x + this.largura / 2, POSICAO_CHAO_Y, 8);
+                }
+            },
+
+            // Executa a ação de agachar (muda altura da caixa de colisão)
+            agachar(ativado) {
+                if (this.estaPulando) return; // Não agacha no ar
+                
+                if (ativado && !this.estaAgachado) {
+                    this.estaAgachado = true;
+                    this.altura = this.alturaAgachado;
+                    this.y = POSICAO_CHAO_Y - this.alturaAgachado;
+                } else if (!ativado && this.estaAgachado) {
+                    this.estaAgachado = false;
+                    this.altura = this.alturaNormal;
+                    this.y = POSICAO_CHAO_Y - this.alturaNormal;
+                }
+            },
+
+            // Atualização física e movimentos por frame
+            atualizar() {
+                // Aplicação da gravidade
+                this.velocidadeY += GRAVIDADE;
+                this.y += this.velocidadeY;
+
+                // Verificação de colisão com o chão
+                const alturaAtual = this.estaAgachado ? this.alturaAgachado : this.alturaNormal;
+                if (this.y + alturaAtual >= POSICAO_CHAO_Y) {
+                    if (this.estaPulando) {
+                        criarParticulasDePoeira(this.x + this.largura / 2, POSICAO_CHAO_Y, 6);
+                    }
+                    this.y = POSICAO_CHAO_Y - alturaAtual;
+                    this.velocidadeY = 0;
+                    this.estaPulando = false;
+                }
+
+                // Alternador de animação de corrida (troca de pés)
+                this.temporizadorAnimacao++;
+                if (this.temporizadorAnimacao % 6 === 0) {
+                    this.quadroAnimacao = (this.quadroAnimacao + 1) % 2;
+                }
+            },
+
+            // Renderização gráfica do personagem usando vetores no Canvas
+            desenhar(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                if (this.estaAgachado) {
+                    // Sprite do Personagem Agachado
+                    ctx.fillStyle = '#ef4444'; // Boné Vermelho do Mario
+                    ctx.fillRect(0, 4, 32, 10);
+                    ctx.fillStyle = '#fbbf24'; // Pele Amarela do Dino
+                    ctx.fillRect(20, 0, 16, 12);
+                    ctx.fillStyle = '#1e3a8a'; // Macacão Azul
+                    ctx.fillRect(4, 14, 28, 10);
+                    // Pés em movimento
+                    ctx.fillStyle = '#78350f';
+                    const deslocamentoPé = this.quadroAnimacao === 0 ? 0 : 4;
+                    ctx.fillRect(6 + deslocamentoPé, 20, 8, 4);
+                    ctx.fillRect(20 - deslocamentoPé, 20, 8, 4);
+                } else {
+                    // Sprite do Personagem Em Pé / Correndo
+                    // Boné
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(10, 0, 24, 10);
+                    // Rosto e Olhos
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillRect(14, 8, 22, 12);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(28, 10, 4, 4);
+                    // Corpo / Macacão Azul
+                    ctx.fillStyle = '#2563eb';
+                    ctx.fillRect(8, 20, 22, 14);
+                    // Braço Vermelho
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(2, 22, 8, 8);
+                    // Pés/Botas Marrons
+                    ctx.fillStyle = '#78350f';
+                    if (this.estaPulando) {
+                        ctx.fillRect(6, 34, 10, 10);
+                        ctx.fillRect(20, 30, 10, 8);
+                    } else {
+                        const deslocamentoPé = this.quadroAnimacao === 0 ? 4 : -4;
+                        ctx.fillRect(8 + deslocamentoPé, 34, 10, 10);
+                        ctx.fillRect(20 - deslocamentoPé, 34, 10, 10);
+                    }
+                }
+
+                ctx.restore();
+            }
+        };
+
+        // =========================================================================
+        // 4. SISTEMA DE PARTÍCULAS (Efeito visual de Poeira)
+        // =========================================================================
+        function criarParticulasDePoeira(x, y, quantidade) {
+            for (let i = 0; i < quantidade; i++) {
+                particulas.push({
+                    x: x,
+                    y: y,
+                    velocidadeX: (Math.random() - 0.5) * 4,
+                    velocidadeY: (Math.random() - 1) * 3,
+                    tamanho: Math.random() * 4 + 2,
+                    cor: Math.random() > 0.5 ? '#d97706' : '#92400e',
+                    vida: 1.0 // Opacidade inicial
+                });
+            }
+        }
+
+        function atualizarEDesenharParticulas(ctx) {
+            for (let i = particulas.length - 1; i >= 0; i--) {
+                const p = particulas[i];
+                p.x += p.velocidadeX;
+                p.y += p.velocidadeY;
+                p.vida -= 0.04; // Esvaecimento gradual
+
+                if (p.vida <= 0) {
+                    particulas.splice(i, 1);
+                    continue;
+                }
+
+                ctx.fillStyle = p.cor;
+                ctx.globalAlpha = p.vida;
+                ctx.fillRect(p.x, p.y, p.tamanho, p.tamanho);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // =========================================================================
+        // 5. OBSTÁCULOS E GERAÇÃO PROCEDURAL
+        // =========================================================================
+        class Obstaculo {
+            constructor(tipo) {
+                this.tipo = tipo; // 'cacto', 'cano', 'voador'
+                this.x = LARGURA_JOGO + 50;
+                this.remover = false;
+
+                if (tipo === 'cacto') {
+                    this.largura = 24 + Math.floor(Math.random() * 2) * 16;
+                    this.altura = 40 + Math.floor(Math.random() * 15);
+                    this.y = POSICAO_CHAO_Y - this.altura;
+                } else if (tipo === 'cano') {
+                    this.largura = 36;
+                    this.altura = 50;
+                    this.y = POSICAO_CHAO_Y - this.altura;
+                } else if (tipo === 'voador') {
+                    // Inimigo Voador (Pterodáctilo / Koopa Voador)
+                    this.largura = 36;
+                    this.altura = 28;
+                    // Duas alturas possíveis: Alto (exige agachar) ou Médio (pode pular por cima)
+                    const vooAlto = Math.random() > 0.5;
+                    this.y = vooAlto ? POSICAO_CHAO_Y - 65 : POSICAO_CHAO_Y - 40;
+                    this.estadoAsa = 0;
+                }
+            }
+
+            atualizar() {
+                this.x -= velocidadeJogo;
+                if (this.x + this.largura < -50) {
+                    this.remover = true;
+                }
+                // Animação da asa batendo nos inimigos voadores
+                if (this.tipo === 'voador' && contadorQuadros % 12 === 0) {
+                    this.estadoAsa = 1 - this.estadoAsa;
+                }
+            }
+
+            desenhar(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                if (this.tipo === 'cacto') {
+                    // Cacto Estilo Dinossauro
+                    ctx.fillStyle = '#15803d';
+                    ctx.fillRect(0, 0, this.largura, this.altura);
+                    ctx.fillStyle = '#166534';
+                    ctx.fillRect(4, 0, 4, this.altura);
+                } else if (this.tipo === 'cano') {
+                    // Cano Verde Estilo Super Mario
+                    ctx.fillStyle = '#22c55e';
+                    ctx.fillRect(0, 0, this.largura, this.altura);
+                    ctx.fillStyle = '#15803d';
+                    // Borda superior do cano
+                    ctx.fillRect(-3, 0, this.largura + 6, 12);
+                    ctx.fillStyle = '#86efac';
+                    ctx.fillRect(4, 0, 4, this.altura);
+                } else if (this.tipo === 'voador') {
+                    // Inimigo Voador
+                    ctx.fillStyle = '#ea580c'; // Corpo Laranja
+                    ctx.fillRect(6, 8, 24, 16);
+                    ctx.fillStyle = '#fef08a'; // Bico Amarelo
+                    ctx.fillRect(0, 12, 8, 8);
+                    ctx.fillStyle = '#000000'; // Olho
+                    ctx.fillRect(6, 10, 3, 3);
+                    // Asas em Animação
+                    ctx.fillStyle = '#f8fafc';
+                    if (this.estadoAsa === 0) {
+                        ctx.fillRect(14, -6, 12, 14); // Asa para Cima
+                    } else {
+                        ctx.fillRect(14, 16, 12, 14); // Asa para Baixo
+                    }
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // Controla a frequência e o espaço mínimo entre o surgimento dos obstáculos
+        function gerarObstaculos() {
+            const espacamentoMinimo = 200 + velocidadeJogo * 10;
+            const ultimoObstaculo = obstaculos[obstaculos.length - 1];
+
+            if (!ultimoObstaculo || (LARGURA_JOGO - ultimoObstaculo.x > espacamentoMinimo)) {
+                if (Math.random() < 0.03) {
+                    const tipos = ['cacto', 'cano'];
+                    // Inimigos voadores começam a aparecer apenas após 200 pontos
+                    if (pontuacao > 200) tipos.push('voador');
+                    const tipoSorteado = tipos[Math.floor(Math.random() * tipos.length)];
+                    obstaculos.push(new Obstaculo(tipoSorteado));
+                }
+            }
+        }
+
+        // Lógica de movimentação das Nuvens de Fundo
+        function gerenciarNuvens() {
+            if (Math.random() < 0.01) {
+                nuvens.push({
+                    x: LARGURA_JOGO + 40,
+                    y: 20 + Math.random() * 80,
+                    velocidade: 0.8 + Math.random() * 0.5
+                });
+            }
+
+            for (let i = nuvens.length - 1; i >= 0; i--) {
+                const n = nuvens[i];
+                n.x -= n.velocidade;
+                if (n.x < -100) nuvens.splice(i, 1);
+            }
+        }
+
+        function desenharNuvens(ctx) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            nuvens.forEach(n => {
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, 14, 0, Math.PI * 2);
+                ctx.arc(n.x + 15, n.y - 8, 18, 0, Math.PI * 2);
+                ctx.arc(n.x + 32, n.y, 14, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Renderiza o Cenário de Fundo e o Ciclo Dia/Noite Dinâmico
+        function desenharCenario(ctx) {
+            // Alterna entre dia e noite a cada 500 pontos acumulados
+            const ciclo = Math.floor(pontuacao / 500) % 2;
+            if (ciclo === 0) {
+                // Modo Dia (Azul Escuro Slate)
+                ctx.fillStyle = '#0f172a';
+            } else {
+                // Modo Noite (Azul Meia-Noite)
+                ctx.fillStyle = '#020617';
+            }
+            ctx.fillRect(0, 0, LARGURA_JOGO, ALTURA_JOGO);
+
+            // Chão / Pista de Corrida
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(0, POSICAO_CHAO_Y, LARGURA_JOGO, ALTURA_JOGO - POSICAO_CHAO_Y);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(0, POSICAO_CHAO_Y, LARGURA_JOGO, 4); // Linha do chão
+
+            // Marcas pontilhadas do chão se movimentando para dar sensação de velocidade
+            ctx.fillStyle = '#94a3b8';
+            const deslocamentoChao = (distanciaPercorrida * velocidadeJogo) % 40;
+            for (let x = -deslocamentoChao; x < LARGURA_JOGO; x += 40) {
+                ctx.fillRect(x, POSICAO_CHAO_Y + 12, 16, 4);
+            }
+        }
+
+        // =========================================================================
+        // 6. DETECÇÃO DE COLISÃO (Caixa Delimitadora - AABB)
+        // =========================================================================
+        function verificarColisao(p, o) {
+            // Margem de tolerância (padding) para tornar a colisão mais justa para o jogador
+            const margem = 5;
+            const pX = p.x + margem;
+            const pY = p.y + margem;
+            const pLargura = p.largura - (margem * 2);
+            const pAltura = (p.estaAgachado ? p.alturaAgachado : p.alturaNormal) - (margem * 2);
+
+            const oX = o.x + margem;
+            const oY = o.y + margem;
+            const oLargura = o.largura - (margem * 2);
+            const oAltura = o.altura - (margem * 2);
+
+            return (
+                pX < oX + oLargura &&
+                pX + pLargura > oX &&
+                pY < oY + oAltura &&
+                pY + pAltura > oY
+            );
+        }
+
+        // =========================================================================
+        // 7. LOOP PRINCIPAL DO JOGO E ESTADOS
+        // =========================================================================
+        function reiniciarVariaveis() {
+            velocidadeJogo = VELOCIDADE_INICIAL;
+            pontuacao = 0;
+            distanciaPercorrida = 0;
+            contadorQuadros = 0;
+            obstaculos = [];
+            particulas = [];
+            jogador.y = POSICAO_CHAO_Y - jogador.alturaNormal;
+            jogador.velocidadeY = 0;
+            jogador.estaPulando = false;
+            jogador.estaAgachado = false;
+            scoreText.innerText = `PONTOS: 00000`;
+        }
+
+        function iniciarJogo() {
+            audio.iniciar();
+            reiniciarVariaveis();
+            estadoJogo = 'JOGANDO';
+            startOverlay.classList.add('hidden');
+            gameOverOverlay.classList.add('hidden');
+        }
+
+        function encerrarJogo() {
+            estadoJogo = 'FIM_DE_JOGO';
+            audio.tocarSomFimDeJogo();
+
+            let novoRecorde = false;
+            if (pontuacao > recorde) {
+                recorde = pontuacao;
+                localStorage.setItem('dino_mario_recorde', recorde);
+                highScoreText.innerText = `RECORDE: ${String(recorde).padStart(5, '0')}`;
+                novoRecorde = true;
+            }
+
+            finalScore.innerText = `PONTOS: ${String(pontuacao).padStart(5, '0')}`;
+            if (novoRecorde) {
+                newRecordMsg.classList.remove('hidden');
+            } else {
+                newRecordMsg.classList.add('hidden');
+            }
+
+            gameOverOverlay.classList.remove('hidden');
+        }
+
+        // Loop de Renderização Executado a ~60 Quadros por Segundo (FPS)
+        function loopDoJogo() {
+            contadorQuadros++;
+
+            // 1. Renderiza o Cenário de Fundo
+            desenharCenario(ctx);
+
+            // 2. Atualiza e Renderiza as Nuvens
+            gerenciarNuvens();
+            desenharNuvens(ctx);
+
+            if (estadoJogo === 'JOGANDO') {
+                distanciaPercorrida++;
+                pontuacao = Math.floor(distanciaPercorrida / 5);
+
+                // Efeito sonoro a cada 100 pontos conquistados
+                if (pontuacao > 0 && pontuacao % 100 === 0 && distanciaPercorrida % 5 === 0) {
+                    audio.tocarSomPonto();
+                }
+
+                // Aumenta a velocidade progressivamente
+                if (velocidadeJogo < VELOCIDADE_MAXIMA) {
+                    velocidadeJogo += 0.0015;
+                }
+
+                // Atualiza o painel com os pontos do jogador
+                scoreText.innerText = `PONTOS: ${String(pontuacao).padStart(5, '0')}`;
+
+                // Atualiza o Jogador
+                jogador.atualizar();
+
+                // Gera e Atualiza Obstáculos
+                gerarObstaculos();
+                for (let i = obstaculos.length - 1; i >= 0; i--) {
+                    const obs = obstaculos[i];
+                    obs.atualizar();
+                    obs.desenhar(ctx);
+
+                    // Teste de Colisão
+                    if (verificarColisao(jogador, obs)) {
+                        encerrarJogo();
+                    }
+
+                    // Limpeza de obstáculos que saíram da tela
+                    if (obs.remover) {
+                        obstaculos.splice(i, 1);
+                    }
+                }
+            } else {
+                // Se estiver no Game Over, apenas desenha os obstáculos parados
+                obstaculos.forEach(obs => obs.desenhar(ctx));
+            }
+
+            // Desenha o jogador e as partículas de poeira por cima de tudo
+            jogador.desenhar(ctx);
+            atualizarEDesenharParticulas(ctx);
+
+            // Solicita o próximo quadro de animação
+            requestAnimationFrame(loopDoJogo);
+        }
+
+        // =========================================================================
+        // 8. GERENCIAMENTO DE ENTRADAS (Teclado, Clique e Toque Mobile)
+        // =========================================================================
+        function tratarPressionamentoTeclas(e) {
+            audio.iniciar();
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault(); // Impede a rolagem padrão da página
+                if (estadoJogo === 'JOGANDO') {
+                    jogador.pular();
+                } else {
+                    iniciarJogo();
+                }
+            } else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                if (estadoJogo === 'JOGANDO') {
+                    jogador.agachar(true);
+                }
+            }
+        }
+
+        function tratarSolturaTeclas(e) {
+            if (e.code === 'ArrowDown') {
+                jogador.agachar(false);
+            }
+        }
+
+        // Escutadores de Eventos do Teclado
+        window.addEventListener('keydown', tratarPressionamentoTeclas);
+        window.addEventListener('keyup', tratarSolturaTeclas);
+
+        // Suporte para clique de mouse na tela de Canvas
+        canvas.addEventListener('pointerdown', () => {
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') {
+                jogador.pular();
+            } else {
+                iniciarJogo();
+            }
+        });
+
+        // Eventos para Botões Touch na Interface Mobile
+        mobileJumpBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') jogador.pular();
+            else iniciarJogo();
+        });
+
+        mobileDuckBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            audio.iniciar();
+            if (estadoJogo === 'JOGANDO') jogador.agachar(true);
+        });
+
+        mobileDuckBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            jogador.agachar(false);
+        });
+
+        // Eventos de Clique nos Botões da Interface
+        startBtn.addEventListener('click', iniciarJogo);
+        restartBtn.addEventListener('click', iniciarJogo);
+
+        // Inicialização do Loop do Jogo ao carregar a página
+        window.onload = () => {
+            loopDoJogo();
+        };
+    </script>
+</body>
+</html>
