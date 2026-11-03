@@ -128,4 +128,319 @@
                 osc.frequency.setValueAtTime(523.25, this.ctx.currentTime);
                 osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.08);
                 gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-                gain.gain
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.2);
+            }
+            tocarSomFimDeJogo() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(40, this.ctx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.4);
+            }
+        }
+
+        const audio = new GerenciadorDeAudio();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const LARGURA_JOGO = 800;
+        const ALTURA_JOGO = 300;
+        canvas.width = LARGURA_JOGO;
+        canvas.height = ALTURA_JOGO;
+
+        const POSICAO_CHAO_Y = ALTURA_JOGO - 40;
+        const GRAVIDADE = 0.65;
+        const VELOCIDADE_INICIAL = 6.5;
+        const VELOCIDADE_MAXIMA = 14;
+
+        const startOverlay = document.getElementById('startOverlay');
+        const gameOverOverlay = document.getElementById('gameOverOverlay');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const scoreText = document.getElementById('scoreText');
+        const highScoreText = document.getElementById('highScoreText');
+        const finalScore = document.getElementById('finalScore');
+        const newRecordMsg = document.getElementById('newRecordMsg');
+        const mobileJumpBtn = document.getElementById('mobileJumpBtn');
+        const mobileDuckBtn = document.getElementById('mobileDuckBtn');
+
+        let estadoJogo = 'INICIAL';
+        let velocidadeJogo = VELOCIDADE_INICIAL;
+        let pontuacao = 0;
+        let recorde = parseInt(localStorage.getItem('senai_runner_recorde') || '0', 10);
+        let distanciaPercorrida = 0;
+        let contadorQuadros = 0;
+        let particulas = [];
+        let obstaculos = [];
+
+        // Posição inicial do letreiro no fundo
+        let posXTextoFundo = LARGURA_JOGO;
+        const TEXTO_FUNDO = "Mundo SENAI DR - Sergipe";
+
+        highScoreText.innerText = `RECORDE: ${String(recorde).padStart(5, '0')}`;
+
+        // Personagem Operador Industrial
+        const jogador = {
+            x: 60,
+            y: POSICAO_CHAO_Y - 44,
+            largura: 36,
+            altura: 44,
+            alturaNormal: 44,
+            alturaAgachado: 24,
+            velocidadeY: 0,
+            estaPulando: false,
+            estaAgachado: false,
+            quadroAnimacao: 0,
+            temporizadorAnimacao: 0,
+
+            pular() {
+                if (!this.estaPulando) {
+                    this.velocidadeY = -12.5;
+                    this.estaPulando = true;
+                    audio.tocarSomPulo();
+                    criarParticulasFumaca(this.x + this.largura / 2, POSICAO_CHAO_Y, 8);
+                }
+            },
+
+            agachar(ativado) {
+                if (this.estaPulando) return;
+                if (ativado && !this.estaAgachado) {
+                    this.estaAgachado = true;
+                    this.altura = this.alturaAgachado;
+                    this.y = POSICAO_CHAO_Y - this.alturaAgachado;
+                } else if (!ativado && this.estaAgachado) {
+                    this.estaAgachado = false;
+                    this.altura = this.alturaNormal;
+                    this.y = POSICAO_CHAO_Y - this.alturaNormal;
+                }
+            },
+
+            atualizar() {
+                this.velocidadeY += GRAVIDADE;
+                this.y += this.velocidadeY;
+
+                const alturaAtual = this.estaAgachado ? this.alturaAgachado : this.alturaNormal;
+                if (this.y + alturaAtual >= POSICAO_CHAO_Y) {
+                    if (this.estaPulando) {
+                        criarParticulasFumaca(this.x + this.largura / 2, POSICAO_CHAO_Y, 6);
+                    }
+                    this.y = POSICAO_CHAO_Y - alturaAtual;
+                    this.velocidadeY = 0;
+                    this.estaPulando = false;
+                }
+
+                this.temporizadorAnimacao++;
+                if (this.temporizadorAnimacao % 6 === 0) {
+                    this.quadroAnimacao = (this.quadroAnimacao + 1) % 2;
+                }
+            },
+
+            desenhar(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                if (this.estaAgachado) {
+                    // Capacete Amarelo Industrial
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillRect(8, 0, 24, 8);
+                    // Uniforme Azul SENAI
+                    ctx.fillStyle = '#1d4ed8';
+                    ctx.fillRect(0, 8, 28, 12);
+                    // Botas de Segurança
+                    ctx.fillStyle = '#334155';
+                    const deslocamentoPe = this.quadroAnimacao === 0 ? 0 : 4;
+                    ctx.fillRect(4 + deslocamentoPe, 20, 8, 4);
+                    ctx.fillRect(18 - deslocamentoPe, 20, 8, 4);
+                } else {
+                    // Capacete Amarelo com Aba
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillRect(6, 0, 24, 10);
+                    ctx.fillRect(4, 8, 28, 3);
+                    // Cabeça/Óculos Proteção
+                    ctx.fillStyle = '#fcd34d';
+                    ctx.fillRect(10, 11, 16, 7);
+                    ctx.fillStyle = '#0284c7'; // Óculos
+                    ctx.fillRect(18, 12, 8, 4);
+                    // Uniforme SENAI (Macacão Azul)
+                    ctx.fillStyle = '#1d4ed8';
+                    ctx.fillRect(8, 18, 20, 16);
+                    ctx.fillStyle = '#ffffff'; // Logo/Detalhe branco
+                    ctx.fillRect(12, 21, 5, 5);
+                    // Braço com Luva
+                    ctx.fillStyle = '#ea580c';
+                    ctx.fillRect(2, 20, 6, 10);
+                    // Botas Industriais
+                    ctx.fillStyle = '#1e293b';
+                    if (this.estaPulando) {
+                        ctx.fillRect(6, 34, 9, 10);
+                        ctx.fillRect(18, 30, 9, 8);
+                    } else {
+                        const deslocamentoPe = this.quadroAnimacao === 0 ? 4 : -4;
+                        ctx.fillRect(6 + deslocamentoPe, 34, 9, 10);
+                        ctx.fillRect(18 - deslocamentoPe, 34, 9, 10);
+                    }
+                }
+
+                ctx.restore();
+            }
+        };
+
+        // Partículas (Fumaça Industrial)
+        function criarParticulasFumaca(x, y, quantidade) {
+            for (let i = 0; i < quantidade; i++) {
+                particulas.push({
+                    x: x,
+                    y: y,
+                    velocidadeX: (Math.random() - 0.5) * 3,
+                    velocidadeY: (Math.random() - 1) * 2,
+                    tamanho: Math.random() * 5 + 2,
+                    cor: '#94a3b8',
+                    vida: 1.0
+                });
+            }
+        }
+
+        function atualizarEDesenharParticulas(ctx) {
+            for (let i = particulas.length - 1; i >= 0; i--) {
+                const p = particulas[i];
+                p.x += p.velocidadeX;
+                p.y += p.velocidadeY;
+                p.vida -= 0.05;
+
+                if (p.vida <= 0) {
+                    particulas.splice(i, 1);
+                    continue;
+                }
+
+                ctx.fillStyle = p.cor;
+                ctx.globalAlpha = p.vida;
+                ctx.fillRect(p.x, p.y, p.tamanho, p.tamanho);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // Obstáculos Industriais
+        class Obstaculo {
+            constructor(tipo) {
+                this.tipo = tipo; // 'barril', 'engrenagem', 'drone'
+                this.x = LARGURA_JOGO + 50;
+                this.remover = false;
+
+                if (tipo === 'barril') {
+                    this.largura = 30;
+                    this.altura = 42;
+                    this.y = POSICAO_CHAO_Y - this.altura;
+                } else if (tipo === 'engrenagem') {
+                    this.largura = 36;
+                    this.altura = 36;
+                    this.y = POSICAO_CHAO_Y - this.altura;
+                    this.angulo = 0;
+                } else if (tipo === 'drone') {
+                    this.largura = 38;
+                    this.altura = 26;
+                    const vooAlto = Math.random() > 0.5;
+                    this.y = vooAlto ? POSICAO_CHAO_Y - 65 : POSICAO_CHAO_Y - 40;
+                }
+            }
+
+            atualizar() {
+                this.x -= velocidadeJogo;
+                if (this.x + this.largura < -50) this.remover = true;
+                if (this.tipo === 'engrenagem') this.angulo += 0.1;
+            }
+
+            desenhar(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                if (this.tipo === 'barril') {
+                    // Barril de Resíduos Tóxicos / Industrial
+                    ctx.fillStyle = '#dc2626'; // Vermelho
+                    ctx.fillRect(0, 0, this.largura, this.altura);
+                    ctx.fillStyle = '#991b1b';
+                    ctx.fillRect(0, 4, this.largura, 6);
+                    ctx.fillRect(0, 32, this.largura, 6);
+                    // Símbolo Amarelo de Alerta
+                    ctx.fillStyle = '#facc15';
+                    ctx.fillRect(10, 16, 10, 10);
+                } else if (this.tipo === 'engrenagem') {
+                    // Engrenagem Industrial
+                    ctx.fillStyle = '#64748b';
+                    ctx.fillRect(0, 0, this.largura, this.altura);
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(6, 6, 24, 24);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(14, 14, 8, 8);
+                } else if (this.tipo === 'drone') {
+                    // Drone de Inspeção Industrial
+                    ctx.fillStyle = '#475569';
+                    ctx.fillRect(6, 8, 26, 12);
+                    ctx.fillStyle = '#06b6d4'; // Lente de sensor Cyan
+                    ctx.fillRect(2, 12, 6, 6);
+                    // Hélices
+                    ctx.fillStyle = '#94a3b8';
+                    const h = contadorQuadros % 4 < 2 ? 2 : 14;
+                    ctx.fillRect(2, h, 10, 2);
+                    ctx.fillRect(26, h, 10, 2);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function gerarObstaculos() {
+            const espacamentoMinimo = 200 + velocidadeJogo * 10;
+            const ultimoObstaculo = obstaculos[obstaculos.length - 1];
+
+            if (!ultimoObstaculo || (LARGURA_JOGO - ultimoObstaculo.x > espacamentoMinimo)) {
+                if (Math.random() < 0.03) {
+                    const tipos = ['barril', 'engrenagem'];
+                    if (pontuacao > 150) tipos.push('drone');
+                    const tipoSorteado = tipos[Math.floor(Math.random() * tipos.length)];
+                    obstaculos.push(new Obstaculo(tipoSorteado));
+                }
+            }
+        }
+
+        // Desenhar Fundo com Banner "Mundo SENAI DR - Sergipe" Passando
+        function desenharCenario(ctx) {
+            // Fundo escuro de galpão industrial
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, LARGURA_JOGO, ALTURA_JOGO);
+
+            // Vigas industriais no teto
+            ctx.fillStyle = '#1e293b';
+            for (let i = 0; i < LARGURA_JOGO; i += 80) {
+                ctx.fillRect(i, 0, 10, 60);
+            }
+            ctx.fillRect(0, 20, LARGURA_JOGO, 8);
+
+            // === FRASE PASSANDO NO FUNDO (Mundo SENAI DR - Sergipe) ===
+            ctx.save();
+            ctx.font = '20px "Press Start 2P", monospace';
+            ctx.fillStyle = 'rgba(30, 58, 138, 0.35)'; // Azul translúcido de fundo para efeito painel LED
+            ctx.fillRect(0, 75, LARGURA_JOGO, 45);
+
+            ctx.fillStyle = '#60a5fa'; // Texto luminoso em azul claro
+            ctx.shadowColor = '#3b82f6';
+            ctx.shadowBlur = 8;
+            ctx.fillText(TEXTO_FUNDO, posXTextoFundo, 106);
+            ctx.restore();
+
+            // Atualiza velocidade de deslocamento do letreiro
+            if (estadoJogo === 'JOGANDO') {
+                posXTextoFundo -= (velocidadeJogo * 0.4);
+            } else {
+                posXTextoFundo -= 1.5; // Continua movendo suavemente nas telas de menu
+            }
+
+            // Reseta posição da frase para criar loop infinito
+            const larguraTexto = ctx.measureText(TEXTO_
